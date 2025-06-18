@@ -1,34 +1,48 @@
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
-import crypto from "crypto"
+import { v4 as uuidv4 } from "uuid"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-export function generateId() {
-  return crypto.randomUUID()
-}
-
-export function generateComplaintNumber() {
-  return `RA-${new Date().getFullYear()}-${String(Math.floor(1000 + Math.random() * 9000)).padStart(4, "0")}`
-}
-
-export function generateVerificationToken() {
-  return crypto.randomBytes(32).toString("hex")
-}
-
-export function formatDate(date: string | Date) {
-  return new Date(date).toLocaleDateString("en-US", {
+export function formatDate(dateString: string | Date) {
+  const date = typeof dateString === "string" ? new Date(dateString) : dateString
+  return date.toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
     day: "numeric",
   })
 }
 
-export function formatTime(time: string) {
-  return new Date(`2000-01-01T${time}`).toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-  })
+export function generateComplaintNumber() {
+  const now = new Date()
+  const year = now.getFullYear().toString().slice(-2)
+  const month = (now.getMonth() + 1).toString().padStart(2, "0")
+  const randomDigits = Math.floor(Math.random() * 10000)
+    .toString()
+    .padStart(4, "0")
+
+  return `RA-${year}${month}-${randomDigits}`
+}
+
+export function generateVerificationToken() {
+  return uuidv4()
+}
+
+export function getStatusColor(status: string) {
+  switch (status.toLowerCase()) {
+    case "pending":
+      return "amber"
+    case "under review":
+      return "purple"
+    case "investigating":
+      return "teal"
+    case "resolved":
+      return "green"
+    case "closed":
+      return "gray"
+    default:
+      return "gray"
+  }
 }
