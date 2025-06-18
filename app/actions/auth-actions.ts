@@ -7,6 +7,26 @@ import bcrypt from "bcryptjs"
 
 export async function adminLogin(email: string, password: string) {
   try {
+    // Check for hardcoded admin credentials
+    if (email === "admin@gmail.com" && password === "@Admin123") {
+      // Set session cookie for admin
+      cookies().set(
+        "admin-session",
+        JSON.stringify({
+          id: "admin-1",
+          email: "admin@gmail.com",
+          role: "admin",
+        }),
+        {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === "production",
+          maxAge: 60 * 60 * 24 * 7, // 1 week
+          path: "/",
+        },
+      )
+      return { success: true }
+    }
+
     const supabase = createServerSupabaseClient()
 
     // Get the admin user
@@ -25,16 +45,6 @@ export async function adminLogin(email: string, password: string) {
     const passwordMatch = await bcrypt.compare(password, user.password)
     if (!passwordMatch) {
       return { success: false, error: "Invalid email or password" }
-    }
-
-    // Sign in with Supabase Auth
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-
-    if (error) {
-      return { success: false, error: error.message }
     }
 
     // Set session cookie
@@ -120,25 +130,6 @@ export async function registerUser(email: string, password: string, fullName: st
       return { success: false, error: userError.message }
     }
 
-    // Create user in Supabase Auth
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          full_name: fullName,
-          role: "student",
-        },
-      },
-    })
-
-    if (error) {
-      // Rollback user creation in our database
-      await supabase.from("users").delete().eq("email", email)
-
-      return { success: false, error: error.message }
-    }
-
     // In a real app, send verification email with the token
     // For now, we'll just return the token for testing
     return {
@@ -212,16 +203,6 @@ export async function loginUser(email: string, password: string) {
     const passwordMatch = await bcrypt.compare(password, user.password)
     if (!passwordMatch) {
       return { success: false, error: "Invalid email or password" }
-    }
-
-    // Sign in with Supabase Auth
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
-
-    if (error) {
-      return { success: false, error: error.message }
     }
 
     // Set session cookie
