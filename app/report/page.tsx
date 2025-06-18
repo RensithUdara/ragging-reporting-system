@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -12,14 +12,16 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle, ArrowLeft, CheckCircle, Shield } from "lucide-react"
+import { AlertCircle, ArrowLeft, CheckCircle, FileText, Shield, Trash2, Upload } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Progress } from "@/components/ui/progress"
 import { submitReport } from "@/app/actions/report-actions"
 import { checkUserAuth } from "@/app/actions/auth-actions"
 
 export default function ReportPage() {
   const router = useRouter()
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -27,6 +29,8 @@ export default function ReportPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [user, setUser] = useState<any>(null)
   const [anonymous, setAnonymous] = useState(true)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [evidenceUrl, setEvidenceUrl] = useState<string | null>(null)
 
   // Form fields
   const [incidentDate, setIncidentDate] = useState("")
@@ -35,6 +39,7 @@ export default function ReportPage() {
   const [incidentCategory, setIncidentCategory] = useState("")
   const [incidentDescription, setIncidentDescription] = useState("")
   const [evidence, setEvidence] = useState<File | null>(null)
+  const [dragActive, setDragActive] = useState(false)
 
   useEffect(() => {
     async function checkAuth() {
@@ -48,10 +53,28 @@ export default function ReportPage() {
     checkAuth()
   }, [])
 
+  // Simulate upload progress
+  useEffect(() => {
+    if (isSubmitting && evidence) {
+      const interval = setInterval(() => {
+        setUploadProgress((prev) => {
+          if (prev >= 95) {
+            clearInterval(interval)
+            return prev
+          }
+          return prev + 5
+        })
+      }, 100)
+
+      return () => clearInterval(interval)
+    }
+  }, [isSubmitting, evidence])
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setIsSubmitting(true)
     setError(null)
+    setUploadProgress(0)
 
     if (!incidentDate || !incidentTime || !incidentLocation || !incidentDescription) {
       setError("Please fill in all required fields")
@@ -77,6 +100,8 @@ export default function ReportPage() {
       if (result.success) {
         setSuccess(true)
         setComplaintNumber(result.complaintNumber)
+        setEvidenceUrl(result.evidenceUrl || null)
+        setUploadProgress(100)
 
         // Reset form
         setIncidentDate("")
@@ -97,7 +122,80 @@ export default function ReportPage() {
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     if (e.target.files && e.target.files[0]) {
-      setEvidence(e.target.files[0])
+      validateAndSetFile(e.target.files[0])
+    }
+  }
+
+  function validateAndSetFile(file: File) {
+    // Check file size (5MB limit)
+    if (file.size > 5 * 1024 * 1024) {
+      setError("File size exceeds the maximum limit of 5MB")
+      return
+    }
+
+    // Check file type
+    const allowedTypes = [
+      "image/jpeg",
+      "image/png",
+      "image/gif",
+      "application/pdf",
+      "application/msword",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ]
+    if (!allowedTypes.includes(file.type)) {
+      setError("File type not allowed. Please upload an image, PDF, or document file")
+      return
+    }
+
+    setError(null)
+    setEvidence(file)
+  }
+
+  function handleDrag(e: React.DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true)
+    } else if (e.type === "dragleave") {
+      setDragActive(false)
+    }
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragActive(false)
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      validateAndSetFile(e.dataTransfer.files[0])
+    }
+  }
+
+  function removeFile() {
+    setEvidence(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
+  }
+
+  function getFileIcon(fileType: string) {
+    if (fileType.startsWith("image/")) {
+      return "🖼️"
+    } else if (fileType.includes("pdf")) {
+      return "📄"
+    } else if (fileType.includes("word")) {
+      return "📝"
+    } else {
+      return "📎"
+    }
+  }
+
+  function formatFileSize(bytes: number) {
+    if (bytes < 1024) {
+      return bytes + " bytes"
+    } else if (bytes < 1024 * 1024) {
+      return (bytes / 1024).toFixed(1) + " KB"
+    } else {
+      return (bytes / (1024 * 1024)).toFixed(1) + " MB"
     }
   }
 
@@ -140,6 +238,20 @@ export default function ReportPage() {
                   Please save this number to check the status of your complaint later.
                 </p>
               </div>
+
+              {evidenceUrl && (
+                <div className="p-4 bg-gray-100 rounded-md">
+                  <p className="text-sm text-gray-500 mb-2">Your evidence file:</p>
+                  <div className="flex justify-center">
+                    <Button asChild variant="outline" size="sm" className="flex items-center">
+                      <a href={evidenceUrl} target="_blank" rel="noopener noreferrer">
+                        <FileText className="h-4 w-4 mr-2" />
+                        View Uploaded Evidence
+                      </a>
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
             <CardFooter className="flex flex-col space-y-2">
               <Button asChild className="w-full bg-teal-600 hover:bg-teal-700">
@@ -155,9 +267,7 @@ export default function ReportPage() {
         <footer className="bg-gray-100 py-6">
           <div className="container mx-auto px-4">
             <div className="flex flex-col md:flex-row justify-between items-center">
-              <p className="text-gray-600 mb-4 md:mb-0">
-                &copy; {new Date().getFullYear()} SafeCampus Sri Lanka. All rights reserved.
-              </p>
+              <p className="text-gray-600 mb-4 md:mb-0">&copy; 2025 CodeCraftix Technologies. All rights reserved.</p>
               <div className="flex gap-4">
                 <Link href="/about" className="text-gray-600 hover:text-teal-600">
                   About
@@ -324,15 +434,76 @@ export default function ReportPage() {
 
                     <div className="space-y-2">
                       <Label htmlFor="evidence">Evidence (Optional)</Label>
-                      <Input
-                        id="evidence"
-                        type="file"
-                        onChange={handleFileChange}
-                        accept="image/jpeg,image/png,application/pdf"
-                      />
-                      <p className="text-xs text-gray-500">
-                        You can upload images (JPG, PNG) or documents (PDF) up to 5MB
-                      </p>
+                      <div
+                        className={`border-2 border-dashed rounded-lg p-4 transition-colors ${
+                          dragActive
+                            ? "border-teal-500 bg-teal-50"
+                            : evidence
+                              ? "border-green-500 bg-green-50"
+                              : "border-gray-300 hover:border-teal-500"
+                        }`}
+                        onDragEnter={handleDrag}
+                        onDragLeave={handleDrag}
+                        onDragOver={handleDrag}
+                        onDrop={handleDrop}
+                      >
+                        <input
+                          ref={fileInputRef}
+                          id="evidence"
+                          type="file"
+                          onChange={handleFileChange}
+                          className="hidden"
+                          accept="image/jpeg,image/png,image/gif,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        />
+
+                        {evidence ? (
+                          <div className="flex items-center justify-between bg-white p-3 rounded-md">
+                            <div className="flex items-center">
+                              <div className="text-2xl mr-3">{getFileIcon(evidence.type)}</div>
+                              <div>
+                                <p className="font-medium truncate max-w-[200px]">{evidence.name}</p>
+                                <p className="text-xs text-gray-500">{formatFileSize(evidence.size)}</p>
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={removeFile}
+                              className="text-gray-500 hover:text-red-500"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ) : (
+                          <div className="text-center py-6">
+                            <Upload className="h-10 w-10 text-gray-400 mx-auto mb-2" />
+                            <p className="text-sm font-medium mb-1">Drag and drop your file here or</p>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => fileInputRef.current?.click()}
+                              className="mt-2"
+                            >
+                              Browse Files
+                            </Button>
+                            <p className="text-xs text-gray-500 mt-2">
+                              Supported formats: JPG, PNG, GIF, PDF, DOC, DOCX (Max 5MB)
+                            </p>
+                          </div>
+                        )}
+
+                        {isSubmitting && evidence && (
+                          <div className="mt-3">
+                            <div className="flex justify-between text-xs mb-1">
+                              <span>Uploading...</span>
+                              <span>{uploadProgress}%</span>
+                            </div>
+                            <Progress value={uploadProgress} className="h-2" />
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {isAuthenticated && (
@@ -456,9 +627,7 @@ export default function ReportPage() {
       <footer className="bg-gray-100 py-6 mt-8">
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row justify-between items-center">
-            <p className="text-gray-600 mb-4 md:mb-0">
-              &copy; {new Date().getFullYear()} SafeCampus Sri Lanka. All rights reserved.
-            </p>
+            <p className="text-gray-600 mb-4 md:mb-0">&copy; 2025 CodeCraftix Technologies. All rights reserved.</p>
             <div className="flex gap-4">
               <Link href="/about" className="text-gray-600 hover:text-teal-600">
                 About
