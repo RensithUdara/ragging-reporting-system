@@ -7,13 +7,18 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { AlertCircle, ArrowLeft, Clock, Download, FileText, Shield } from "lucide-react"
+import { AlertCircle, ArrowLeft, Clock, Download, FileText, Shield, ImageIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Separator } from "@/components/ui/separator"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { getComplaintDetails, updateComplaintStatus, checkAdminAuth } from "@/app/actions/admin-actions"
+import {
+  getComplaintDetails,
+  updateComplaintStatus,
+  checkAdminAuth,
+  getEvidenceUrlAdmin,
+} from "@/app/actions/admin-actions"
 
 export default function ComplaintDetailsPage({ params }: { params: { id: string } }) {
   const router = useRouter()
@@ -25,6 +30,8 @@ export default function ComplaintDetailsPage({ params }: { params: { id: string 
   const [publicNotes, setPublicNotes] = useState("")
   const [isUpdating, setIsUpdating] = useState(false)
   const [updateSuccess, setUpdateSuccess] = useState(false)
+  const [evidenceUrl, setEvidenceUrl] = useState<string | null>(null)
+  const [isLoadingEvidence, setIsLoadingEvidence] = useState(false)
 
   useEffect(() => {
     async function checkAuth() {
@@ -51,6 +58,11 @@ export default function ComplaintDetailsPage({ params }: { params: { id: string 
         setStatus(result.complaint.status)
         setInternalNotes(result.complaint.adminNotes || "")
         setPublicNotes(result.complaint.publicNotes || "")
+
+        // If there's evidence, get the URL
+        if (result.complaint.evidencePath) {
+          loadEvidenceUrl()
+        }
       } else {
         setError(result.error || "Failed to load complaint details")
       }
@@ -58,6 +70,20 @@ export default function ComplaintDetailsPage({ params }: { params: { id: string 
       setError("An unexpected error occurred. Please try again.")
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  async function loadEvidenceUrl() {
+    setIsLoadingEvidence(true)
+    try {
+      const result = await getEvidenceUrlAdmin(params.id)
+      if (result.success) {
+        setEvidenceUrl(result.url)
+      }
+    } catch (err) {
+      console.error("Error loading evidence URL:", err)
+    } finally {
+      setIsLoadingEvidence(false)
     }
   }
 
@@ -122,6 +148,20 @@ export default function ComplaintDetailsPage({ params }: { params: { id: string 
         )
       default:
         return <Badge variant="outline">{status}</Badge>
+    }
+  }
+
+  function getFileIcon(fileType: string | null) {
+    if (!fileType) return <FileText className="h-5 w-5 mr-2 text-gray-500" />
+
+    if (fileType.startsWith("image/")) {
+      return <ImageIcon className="h-5 w-5 mr-2 text-blue-500" />
+    } else if (fileType.includes("pdf")) {
+      return <FileText className="h-5 w-5 mr-2 text-red-500" />
+    } else if (fileType.includes("word")) {
+      return <FileText className="h-5 w-5 mr-2 text-blue-600" />
+    } else {
+      return <FileText className="h-5 w-5 mr-2 text-gray-500" />
     }
   }
 
@@ -206,13 +246,42 @@ export default function ComplaintDetailsPage({ params }: { params: { id: string 
                       <div className="p-4 bg-gray-50 rounded-md border">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center">
-                            <FileText className="h-5 w-5 mr-2 text-gray-500" />
-                            <span>Attached evidence</span>
+                            {getFileIcon(complaint.evidenceFileType)}
+                            <span>{complaint.evidenceFileName || "Attached evidence"}</span>
                           </div>
-                          <Button size="sm" variant="outline" className="flex items-center">
-                            <Download className="h-4 w-4 mr-1" />
-                            Download
-                          </Button>
+                          {isLoadingEvidence ? (
+                            <Button size="sm" variant="outline" disabled className="flex items-center">
+                              <Clock className="h-4 w-4 mr-1 animate-spin" />
+                              Loading...
+                            </Button>
+                          ) : evidenceUrl ? (
+                            <div className="flex gap-2">
+                              {complaint.evidenceFileType?.startsWith("image/") && (
+                                <Button size="sm" variant="outline" className="flex items-center" asChild>
+                                  <a href={evidenceUrl} target="_blank" rel="noopener noreferrer">
+                                    <ImageIcon className="h-4 w-4 mr-1" />
+                                    View
+                                  </a>
+                                </Button>
+                              )}
+                              <Button size="sm" variant="outline" className="flex items-center" asChild>
+                                <a
+                                  href={evidenceUrl}
+                                  download={complaint.evidenceFileName || "evidence"}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  <Download className="h-4 w-4 mr-1" />
+                                  Download
+                                </a>
+                              </Button>
+                            </div>
+                          ) : (
+                            <Button size="sm" variant="outline" className="flex items-center" onClick={loadEvidenceUrl}>
+                              <Download className="h-4 w-4 mr-1" />
+                              Download
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </div>
