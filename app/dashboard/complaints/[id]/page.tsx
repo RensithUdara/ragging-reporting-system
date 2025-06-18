@@ -7,11 +7,12 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle, ArrowLeft, Clock, Download, FileText, LogOut, Shield, User } from "lucide-react"
+import { AlertCircle, ArrowLeft, Clock, Download, FileText, LogOut, Shield, User, ImageIcon } from "lucide-react"
 import { Separator } from "@/components/ui/separator"
 import { checkUserAuth, logoutUser } from "@/app/actions/auth-actions"
 import { formatDate } from "@/lib/utils"
 import { createServerSupabaseClient } from "@/lib/supabase"
+import { getEvidenceUrl } from "@/app/actions/report-actions"
 
 export default function ComplaintDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter()
@@ -19,6 +20,8 @@ export default function ComplaintDetailPage({ params }: { params: { id: string }
   const [user, setUser] = useState<any>(null)
   const [complaint, setComplaint] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
+  const [evidenceUrl, setEvidenceUrl] = useState<string | null>(null)
+  const [isLoadingEvidence, setIsLoadingEvidence] = useState(false)
 
   useEffect(() => {
     async function checkAuth() {
@@ -56,10 +59,29 @@ export default function ComplaintDetailPage({ params }: { params: { id: string }
       }
 
       setComplaint(data)
+
+      // If there's evidence, get the URL
+      if (data.evidence_path) {
+        loadEvidenceUrl()
+      }
     } catch (err) {
       setError("An unexpected error occurred. Please try again.")
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  async function loadEvidenceUrl() {
+    setIsLoadingEvidence(true)
+    try {
+      const result = await getEvidenceUrl(params.id)
+      if (result.success) {
+        setEvidenceUrl(result.url)
+      }
+    } catch (err) {
+      console.error("Error loading evidence URL:", err)
+    } finally {
+      setIsLoadingEvidence(false)
     }
   }
 
@@ -105,9 +127,23 @@ export default function ComplaintDetailPage({ params }: { params: { id: string }
     }
   }
 
+  function getFileIcon(fileType: string | null) {
+    if (!fileType) return <FileText className="h-5 w-5 mr-2 text-gray-500" />
+
+    if (fileType.startsWith("image/")) {
+      return <ImageIcon className="h-5 w-5 mr-2 text-blue-500" />
+    } else if (fileType.includes("pdf")) {
+      return <FileText className="h-5 w-5 mr-2 text-red-500" />
+    } else if (fileType.includes("word")) {
+      return <FileText className="h-5 w-5 mr-2 text-blue-600" />
+    } else {
+      return <FileText className="h-5 w-5 mr-2 text-gray-500" />
+    }
+  }
+
   return (
     <div className="flex flex-col min-h-screen">
-      <header className="bg-teal-700 text-white py-3 px-4 border-b border-teal-800">
+      <header className="bg-green-700 text-white py-3 px-4 border-b border-green-800">
         <div className="container mx-auto">
           <div className="flex justify-between items-center">
             <div className="flex items-center">
@@ -120,7 +156,7 @@ export default function ComplaintDetailPage({ params }: { params: { id: string }
                 <User className="h-5 w-5 mr-2" />
                 <span>{user?.fullName || "Student"}</span>
               </div>
-              <Button variant="ghost" className="text-white hover:bg-teal-800" onClick={handleLogout}>
+              <Button variant="ghost" className="text-white hover:bg-green-800" onClick={handleLogout}>
                 <LogOut className="h-5 w-5 mr-2" />
                 <span>Logout</span>
               </Button>
@@ -195,13 +231,42 @@ export default function ComplaintDetailPage({ params }: { params: { id: string }
                     <div className="p-4 bg-gray-50 rounded-md border">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center">
-                          <FileText className="h-5 w-5 mr-2 text-gray-500" />
-                          <span>Attached evidence</span>
+                          {getFileIcon(complaint.evidence_file_type)}
+                          <span>{complaint.evidence_file_name || "Attached evidence"}</span>
                         </div>
-                        <Button size="sm" variant="outline" className="flex items-center">
-                          <Download className="h-4 w-4 mr-1" />
-                          Download
-                        </Button>
+                        {isLoadingEvidence ? (
+                          <Button size="sm" variant="outline" disabled className="flex items-center">
+                            <Clock className="h-4 w-4 mr-1 animate-spin" />
+                            Loading...
+                          </Button>
+                        ) : evidenceUrl ? (
+                          <div className="flex gap-2">
+                            {complaint.evidence_file_type?.startsWith("image/") && (
+                              <Button size="sm" variant="outline" className="flex items-center" asChild>
+                                <a href={evidenceUrl} target="_blank" rel="noopener noreferrer">
+                                  <ImageIcon className="h-4 w-4 mr-1" />
+                                  View
+                                </a>
+                              </Button>
+                            )}
+                            <Button size="sm" variant="outline" className="flex items-center" asChild>
+                              <a
+                                href={evidenceUrl}
+                                download={complaint.evidence_file_name || "evidence"}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <Download className="h-4 w-4 mr-1" />
+                                Download
+                              </a>
+                            </Button>
+                          </div>
+                        ) : (
+                          <Button size="sm" variant="outline" className="flex items-center" onClick={loadEvidenceUrl}>
+                            <Download className="h-4 w-4 mr-1" />
+                            Download
+                          </Button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -273,16 +338,16 @@ export default function ComplaintDetailPage({ params }: { params: { id: string }
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <p className="text-gray-600 mb-4 md:mb-0">
-              &copy; {new Date().getFullYear()} SafeCampus Sri Lanka. All rights reserved.
+              &copy; {new Date().getFullYear()} CodeCraftix Technologies. All rights reserved.
             </p>
             <div className="flex gap-4">
-              <Link href="/about" className="text-gray-600 hover:text-teal-600">
+              <Link href="/about" className="text-gray-600 hover:text-green-600">
                 About
               </Link>
-              <Link href="/faq" className="text-gray-600 hover:text-teal-600">
+              <Link href="/faq" className="text-gray-600 hover:text-green-600">
                 FAQ
               </Link>
-              <Link href="/privacy" className="text-gray-600 hover:text-teal-600">
+              <Link href="/privacy" className="text-gray-600 hover:text-green-600">
                 Privacy Policy
               </Link>
             </div>
