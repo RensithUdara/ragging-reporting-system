@@ -1,7 +1,6 @@
 "use client"
 
 import { Label } from "@/components/ui/label"
-
 import { useState, useEffect } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
@@ -10,13 +9,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle, Clock, FileText, LogOut, Shield, User, ChevronRight, RefreshCw } from "lucide-react"
-import { checkAdminAuth, adminLogout, getComplaints } from "@/app/actions/admin-actions"
+import { AlertCircle, Clock, FileText, LogOut, Shield, User, ChevronRight, RefreshCw, BarChart3 } from "lucide-react"
+import { checkAdminAuth, adminLogout, getComplaints, updateComplaintStatus } from "@/app/actions/admin-actions"
 import { formatDate } from "@/lib/utils"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
 
 export default function AdminDashboardPage() {
   const router = useRouter()
@@ -32,6 +32,7 @@ export default function AdminDashboardPage() {
   const [adminNotes, setAdminNotes] = useState("")
   const [publicNotes, setPublicNotes] = useState("")
   const [isUpdating, setIsUpdating] = useState(false)
+  const [updateSuccess, setUpdateSuccess] = useState(false)
 
   useEffect(() => {
     async function checkAuth() {
@@ -138,14 +139,18 @@ export default function AdminDashboardPage() {
     setAdminNotes(complaint.adminNotes || "")
     setPublicNotes(complaint.publicNotes || "")
     setIsDialogOpen(true)
+    setUpdateSuccess(false)
   }
 
   async function handleUpdateStatus() {
     if (!selectedComplaint) return
 
     setIsUpdating(true)
+    setError(null)
+
     try {
       const result = await updateComplaintStatus(selectedComplaint.complaintId, newStatus, adminNotes, publicNotes)
+
       if (result.success) {
         // Update the complaint in the local state
         const updatedComplaints = complaints.map((c) => {
@@ -159,9 +164,14 @@ export default function AdminDashboardPage() {
           }
           return c
         })
+
         setComplaints(updatedComplaints)
-        setIsDialogOpen(false)
-        // Show success message
+        setUpdateSuccess(true)
+
+        // Reload complaints after a short delay
+        setTimeout(() => {
+          loadComplaints()
+        }, 2000)
       } else {
         setError(result.error || "Failed to update status")
       }
@@ -187,6 +197,14 @@ export default function AdminDashboardPage() {
                 <User className="h-5 w-5 mr-2" />
                 <span>Administrator</span>
               </div>
+              <Button
+                variant="ghost"
+                className="text-white hover:bg-green-800 transition-colors"
+                onClick={() => router.push("/admin/analytics")}
+              >
+                <BarChart3 className="h-5 w-5 mr-2" />
+                <span>Analytics</span>
+              </Button>
               <Button
                 variant="ghost"
                 className="text-white hover:bg-green-800 transition-colors"
@@ -437,7 +455,7 @@ export default function AdminDashboardPage() {
                 </div>
                 <div>
                   <h3 className="text-sm font-medium text-gray-500">Category</h3>
-                  <p>{selectedComplaint.category}</p>
+                  <p>{selectedComplaint.category || "Not specified"}</p>
                 </div>
                 <div>
                   <h3 className="text-sm font-medium text-gray-500">Current Status</h3>
@@ -488,6 +506,17 @@ export default function AdminDashboardPage() {
 
               <div className="border-t pt-4">
                 <h3 className="font-medium mb-2">Update Status</h3>
+
+                {updateSuccess && (
+                  <Alert className="mb-4 bg-green-50 border-green-200">
+                    <AlertCircle className="h-4 w-4 text-green-600" />
+                    <AlertTitle className="text-green-600">Success</AlertTitle>
+                    <AlertDescription className="text-green-700">
+                      Complaint status has been updated successfully.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 <div className="space-y-4">
                   <div>
                     <Label htmlFor="status">Status</Label>
@@ -507,22 +536,22 @@ export default function AdminDashboardPage() {
 
                   <div>
                     <Label htmlFor="adminNotes">Admin Notes (Internal Only)</Label>
-                    <textarea
+                    <Textarea
                       id="adminNotes"
                       value={adminNotes}
                       onChange={(e) => setAdminNotes(e.target.value)}
-                      className="w-full min-h-[100px] p-2 border rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      className="min-h-[100px]"
                       placeholder="Add internal notes about this complaint..."
                     />
                   </div>
 
                   <div>
                     <Label htmlFor="publicNotes">Public Notes (Visible to Reporter)</Label>
-                    <textarea
+                    <Textarea
                       id="publicNotes"
                       value={publicNotes}
                       onChange={(e) => setPublicNotes(e.target.value)}
-                      className="w-full min-h-[100px] p-2 border rounded-md focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                      className="min-h-[100px]"
                       placeholder="Add notes that will be visible to the person who reported this incident..."
                     />
                   </div>
@@ -547,11 +576,4 @@ export default function AdminDashboardPage() {
       </Dialog>
     </div>
   )
-}
-
-// Mock function for updating complaint status
-async function updateComplaintStatus(complaintId: string, status: string, adminNotes: string, publicNotes: string) {
-  // In a real app, this would call the server action
-  console.log("Updating status:", { complaintId, status, adminNotes, publicNotes })
-  return { success: true }
 }
